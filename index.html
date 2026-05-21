@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>すするanki 0.01.01-g</title>
+<title>すするanki 0.01.02-g</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
@@ -128,7 +128,7 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
       <div class="logo-dot"></div>
       <div class="logo-text">すするanki</div>
     </div>
-    <div class="version-badge">v0.01.01-g</div>
+    <div class="version-badge">v0.01.02-g</div>
   </header>
 
   <div id="pgHome" class="screen active">
@@ -308,10 +308,6 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
 </div>
 
 <script>
-/**
- * Firebase Config - ここにFirebaseプロジェクトの設定を貼り付けてください
- */
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAGoYBRoupEFHng_cXoiHmZf9eAlX8ZCHA",
   authDomain: "susuruanki.firebaseapp.com",
@@ -339,7 +335,7 @@ auth.onAuthStateChanged((user) => {
       loginState.innerHTML = `<span style="color:var(--success);">✅ ログイン中: ${escapeHtml(user.displayName || user.email)}</span>`;
       btnLogin.style.display = 'none';
       btnLogout.style.display = 'inline-flex';
-      syncToCloud(true); // ログイン確認後に自動で同期を実行
+      syncToCloud(true);
     } else {
       loginState.innerHTML = `<span style="color:var(--warn);">ログインしていません</span>`;
       btnLogin.style.display = 'inline-flex';
@@ -364,15 +360,12 @@ function firebaseLogout() {
   });
 }
 
-/**
- * Core Database & State Engine Layer
- */
 const STORAGE_KEY = 'susuru_anki_017g';
 let db = [];
 let categories = ["未分類"];
 let categoryTree = { "未分類グループ": ["未分類"] };
 
-let currentViewContext = 'all'; 
+let currentViewContext = 'all';
 let pageHistory = [];
 
 let quizPool = [];
@@ -380,7 +373,7 @@ let quizIndex = 0;
 let quizTimer = null;
 let quizTimeLimit = 0;
 let quizTimeLeft = 0;
-let quizPhase = 'q'; 
+let quizPhase = 'q';
 let selectedChoiceIdx = null;
 let currentQuestionGradThreshold = 5;
 
@@ -388,7 +381,7 @@ let longPressTimeout = null;
 
 window.onload = function() {
   loadData();
-  autoMerge(); 
+  autoMerge();
   buildQuizScopeDropdown();
   
   history.pushState({ page: 'pgHome' }, '', '');
@@ -501,13 +494,13 @@ function executePageTransition(pageId, isBackAction) {
 
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.remove('active');
-    s.style.display = 'none'; 
+    s.style.display = 'none';
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
   const targetScreen = document.getElementById(pageId);
   if(targetScreen) {
-    targetScreen.style.display = 'flex'; 
+    targetScreen.style.display = 'flex';
     targetScreen.classList.add('active');
   }
 
@@ -864,7 +857,7 @@ function handleQuestionLongpress(item) {
         
         item.question = newQ.trim() || item.question;
         item.answer = newA.trim() || item.answer;
-        autoMerge(); 
+        autoMerge();
         renderBox();
       }
     },
@@ -906,7 +899,7 @@ function showAddQModal() {
   };
 
   db.push(newCard);
-  autoMerge(); 
+  autoMerge();
   renderBox();
 }
 
@@ -989,7 +982,7 @@ function loadQuizQuestion() {
   document.getElementById('btnQuizPass').style.display = 'inline-flex';
   document.getElementById('btnQuizAction').innerText = '確定する';
 
-  const targetSpeedMode = document.getElementById('selQuizSpeed').value; 
+  const targetSpeedMode = document.getElementById('selQuizSpeed').value;
   let baseSec = 15;
   if (targetSpeedMode === 'easy') baseSec = 25;
   if (targetSpeedMode === 'hard') baseSec = 10;
@@ -997,7 +990,7 @@ function loadQuizQuestion() {
 
   const len = currentCard.answer.length;
   if(len > 5) baseSec += Math.min(15, (len - 5) * 1.5);
-  if(/[\u3040-\u30ff\u4e00-\u9faf]/.test(currentCard.answer)) baseSec += 5; 
+  if(/[\u3040-\u30ff\u4e00-\u9faf]/.test(currentCard.answer)) baseSec += 5;
 
   quizTimeLimit = baseSec;
   quizTimeLeft = baseSec;
@@ -1127,7 +1120,7 @@ function submitQuizAction() {
   if (mode === 'choice') {
     if(!selectedChoiceIdx) {
       alert("選択肢をどれか1つタップしてください。");
-      quizTimer = setInterval(() => {}, 1000); 
+      quizTimer = setInterval(() => {}, 1000);
       return;
     }
     isCorrect = (selectedChoiceIdx === currentCard.answer);
@@ -1214,7 +1207,7 @@ function importJSON(e) {
       if(parsed.db) db = parsed.db;
       if(parsed.categories) categories = parsed.categories;
       if(parsed.categoryTree) categoryTree = parsed.categoryTree;
-      autoMerge(); 
+      autoMerge();
       alert("📦 JSONインポートに成功し、重複データを統合しました！");
       openPage('pgHome');
     } catch(err) {
@@ -1290,7 +1283,7 @@ function importCSV(e) {
 
         const qText = cols[idxQ]?.trim();
         const aText = cols[idxA]?.trim();
-        if(!qText || !aText) continue; 
+        if(!qText || !aText) continue;
 
         let cText = (idxC !== -1 && cols[idxC]) ? cols[idxC].trim() : "未分類";
         let gText = (idxG !== -1 && cols[idxG]) ? cols[idxG].trim() : "未分類グループ";
@@ -1313,7 +1306,7 @@ function importCSV(e) {
         importCount++;
       }
 
-      autoMerge(); 
+      autoMerge();
       alert(`📊 CSVから ${importCount} 件のカードをインポート統合しました。`);
       openPage('pgHome');
     } catch(err) {
@@ -1323,6 +1316,11 @@ function importCSV(e) {
   reader.readAsText(file);
 }
 
+/* ============================================================
+   CLOUD SYNC - 0.01.02-g: カテゴリー・グループの双方向マージを修正
+   旧: リモートにあってローカルにないグループ/カテゴリーを削除していた
+   新: リモートのグループ/カテゴリーをローカルへ正しく取り込む
+============================================================ */
 async function syncToCloud(isSilent = false) {
   if (!currentUser) {
     if (!isSilent) alert("☁️ クラウド同期エラー\nGoogleアカウントでログインしてください。");
@@ -1342,9 +1340,8 @@ async function syncToCloud(isSilent = false) {
 
     let updatedCount = 0;
 
-    // 2. データの双方向マージ (ローカルとクラウドの統合)
     if (remoteData) {
-      
+
       // A. 問題(db)の統合
       if (Array.isArray(remoteData.db)) {
         let localDbMap = new Map(db.map(q => [q.id, q]));
@@ -1367,45 +1364,38 @@ async function syncToCloud(isSilent = false) {
       }
 
       // B & C. カテゴリーと大カテゴリーの統合
+      // 0.01.02-g 修正: リモートのカテゴリー/グループをローカルへ正しく取り込む
+      // （旧: ローカルに存在しないリモートのカテゴリーを削除していた → 新: 和集合でマージ）
       let remoteTree = remoteData.categoryTree || {};
       let remoteCategories = remoteData.categories || ["未分類"];
 
-      for (let remoteGroupName in remoteTree) {
-        if (!categoryTree.hasOwnProperty(remoteGroupName)) {
-          delete remoteTree[remoteGroupName];
+      // リモートにしか存在しないカテゴリーをローカルへ追加
+      remoteCategories.forEach(rc => {
+        if (rc && rc.trim() !== "" && !categories.includes(rc)) {
+          categories.push(rc);
           updatedCount++;
         }
-      }
-
-      remoteCategories = remoteCategories.filter(rc => {
-        const exists = categories.includes(rc);
-        if (!exists) {
-          for (let g in remoteTree) {
-            if (Array.isArray(remoteTree[g])) {
-              remoteTree[g] = remoteTree[g].filter(c => c !== rc);
-            }
-          }
-          updatedCount++;
-        }
-        return exists;
       });
 
-      for (let localGroupName in categoryTree) {
-        if (!remoteTree.hasOwnProperty(localGroupName)) {
-          remoteTree[localGroupName] = [];
+      // リモートにしか存在しないグループをローカルへ追加し、
+      // 共通グループはカテゴリーを和集合でマージ
+      for (let remoteGroupName in remoteTree) {
+        if (!categoryTree.hasOwnProperty(remoteGroupName)) {
+          // リモート専用グループ → categories に存在するものだけ追加
+          categoryTree[remoteGroupName] = (remoteTree[remoteGroupName] || []).filter(c => categories.includes(c));
           updatedCount++;
+        } else {
+          // 共通グループ → カテゴリーを和集合でマージ
+          let combined = [...new Set([...(categoryTree[remoteGroupName] || []), ...(remoteTree[remoteGroupName] || [])])];
+          categoryTree[remoteGroupName] = combined.filter(c => categories.includes(c));
         }
-        let combinedCats = [...new Set([...(remoteTree[localGroupName] || []), ...(categoryTree[localGroupName] || [])])];
-        remoteTree[localGroupName] = combinedCats.filter(c => categories.includes(c));
       }
-      
-      categories = [...new Set([...remoteCategories, ...categories])];
-      categoryTree = remoteTree;
+      // ローカルにしか存在しないグループはそのまま維持（変更不要）
     }
 
-    // 3. きれいになった統合データをFirestoreへ上書き保存 (set)
+    // クラウドへ保存
     const payload = {
-      version: "0.01.01-g",
+      version: "0.01.02-g",
       db: db,
       categories: categories,
       categoryTree: categoryTree,
@@ -1414,8 +1404,7 @@ async function syncToCloud(isSilent = false) {
 
     await userDocRef.set(payload);
 
-    // 4. ローカルストレージにも保存して画面を最新化
-    autoMerge(); 
+    autoMerge();
     
     if (document.getElementById('pgTree').classList.contains('active')) renderTree();
     if (document.getElementById('pgBox').classList.contains('active')) renderBox();
