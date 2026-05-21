@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>すするanki 0.01.02-g</title>
+<title>すするanki 0.01.03-g</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
@@ -115,6 +115,13 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
 .setting-box-title { font-size: 0.8rem; font-weight: 700; color: var(--text2); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
 
 @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
+
+/* クラウド同期ステータス表示 */
+.sync-status { position: fixed; top: 70px; right: 15px; background: rgba(30, 41, 64, 0.9); backdrop-filter: blur(5px); border: 1px solid var(--border); color: var(--text2); font-size: 0.75rem; font-weight: 700; padding: 6px 12px; border-radius: 20px; z-index: 1000; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.3); pointer-events: none; }
+.sync-status.saving { color: var(--warn); border-color: var(--warn); }
+.sync-status.success { color: var(--success); border-color: var(--success); }
+.sync-status.error { color: var(--danger); border-color: var(--danger); }
+.sync-status.hidden { opacity: 0; transform: translateY(-10px); }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -123,12 +130,14 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
 <body>
 
 <div class="app-container">
+  <div id="cloudSyncStatus" class="sync-status hidden">☁️ 待機中</div>
+
   <header>
     <div class="logo-area" onclick="openPage('pgHome')">
       <div class="logo-dot"></div>
       <div class="logo-text">すするanki</div>
     </div>
-    <div class="version-badge">v0.01.02-g</div>
+    <div class="version-badge">v0.01.03-g</div>
   </header>
 
   <div id="pgHome" class="screen active">
@@ -324,6 +333,7 @@ if (!firebase.apps.length) {
 const auth = firebase.auth();
 const firestore = firebase.firestore();
 let currentUser = null;
+let syncTimeout = null;
 
 auth.onAuthStateChanged((user) => {
   currentUser = user;
@@ -413,7 +423,48 @@ function loadData() {
 function saveData() {
   ensureSystemSanity();
   const payload = { db, categories, categoryTree };
+  
+  // ローカル保存
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+  // ログイン中ならクラウドへ自動保存
+  if (currentUser) {
+    clearTimeout(syncTimeout);
+    setSyncStatus('saving', '🔄 保存中...');
+    syncTimeout = setTimeout(() => {
+      backgroundCloudSave(payload);
+    }, 1000);
+  }
+}
+
+function setSyncStatus(state, text) {
+  const el = document.getElementById('cloudSyncStatus');
+  if(!el) return;
+  el.className = `sync-status ${state}`;
+  el.innerText = text;
+
+  if (state === 'success' || state === 'error') {
+    setTimeout(() => {
+      el.classList.add('hidden');
+    }, 3000);
+  }
+}
+
+async function backgroundCloudSave(payload) {
+  try {
+    const userDocRef = firestore.collection("susuru_anki_users").doc(currentUser.uid);
+    await userDocRef.set({
+      version: "0.01.03-g",
+      db: payload.db,
+      categories: payload.categories,
+      categoryTree: payload.categoryTree,
+      lastSync: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    setSyncStatus('success', '✅ 保存完了');
+  } catch (err) {
+    console.error("Auto Sync Error:", err);
+    setSyncStatus('error', '⚠️ 保存エラー');
+  }
 }
 
 function ensureSystemSanity() {
@@ -1316,11 +1367,6 @@ function importCSV(e) {
   reader.readAsText(file);
 }
 
-/* ============================================================
-   CLOUD SYNC - 0.01.02-g: カテゴリー・グループの双方向マージを修正
-   旧: リモートにあってローカルにないグループ/カテゴリーを削除していた
-   新: リモートのグループ/カテゴリーをローカルへ正しく取り込む
-============================================================ */
 async function syncToCloud(isSilent = false) {
   if (!currentUser) {
     if (!isSilent) alert("☁️ クラウド同期エラー\nGoogleアカウントでログインしてください。");
@@ -1341,8 +1387,6 @@ async function syncToCloud(isSilent = false) {
     let updatedCount = 0;
 
     if (remoteData) {
-
-      // A. 問題(db)の統合
       if (Array.isArray(remoteData.db)) {
         let localDbMap = new Map(db.map(q => [q.id, q]));
 
@@ -1363,13 +1407,9 @@ async function syncToCloud(isSilent = false) {
         db = Array.from(localDbMap.values());
       }
 
-      // B & C. カテゴリーと大カテゴリーの統合
-      // 0.01.02-g 修正: リモートのカテゴリー/グループをローカルへ正しく取り込む
-      // （旧: ローカルに存在しないリモートのカテゴリーを削除していた → 新: 和集合でマージ）
       let remoteTree = remoteData.categoryTree || {};
       let remoteCategories = remoteData.categories || ["未分類"];
 
-      // リモートにしか存在しないカテゴリーをローカルへ追加
       remoteCategories.forEach(rc => {
         if (rc && rc.trim() !== "" && !categories.includes(rc)) {
           categories.push(rc);
@@ -1377,25 +1417,19 @@ async function syncToCloud(isSilent = false) {
         }
       });
 
-      // リモートにしか存在しないグループをローカルへ追加し、
-      // 共通グループはカテゴリーを和集合でマージ
       for (let remoteGroupName in remoteTree) {
         if (!categoryTree.hasOwnProperty(remoteGroupName)) {
-          // リモート専用グループ → categories に存在するものだけ追加
           categoryTree[remoteGroupName] = (remoteTree[remoteGroupName] || []).filter(c => categories.includes(c));
           updatedCount++;
         } else {
-          // 共通グループ → カテゴリーを和集合でマージ
           let combined = [...new Set([...(categoryTree[remoteGroupName] || []), ...(remoteTree[remoteGroupName] || [])])];
           categoryTree[remoteGroupName] = combined.filter(c => categories.includes(c));
         }
       }
-      // ローカルにしか存在しないグループはそのまま維持（変更不要）
     }
 
-    // クラウドへ保存
     const payload = {
-      version: "0.01.02-g",
+      version: "0.01.03-g",
       db: db,
       categories: categories,
       categoryTree: categoryTree,
