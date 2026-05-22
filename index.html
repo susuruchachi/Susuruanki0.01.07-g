@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>すするanki 0.01.06-g</title>
+<title>すするanki 0.01.07-g</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 /* ★長押し時のテキスト選択・システムメニューを完全ブロック */
@@ -147,7 +147,7 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
       <div class="logo-dot"></div>
       <div class="logo-text">すするanki</div>
     </div>
-    <div class="version-badge">v0.01.06-g</div>
+    <div class="version-badge">v0.01.07-g</div>
   </header>
 
   <div id="pgHome" class="screen active">
@@ -216,7 +216,7 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
     <div class="card">
       <div class="setting-box-title">✨ 解答のコツ (記述式)</div>
       <p style="font-size:0.85rem; line-height:1.6; color:var(--text);">
-        全角・半角の違いは自動で吸収されます。<br>また、答えに「りんご, みかん」のようにカンマや読点が含まれる場合、順番が「みかん, りんご」と逆に入力しても正解として判定されます！
+        全角・半角の違いは自動で吸収されます。<br>また、答えに「りんご, みかん」のようにカンマや読点、<strong>半角・全角スペース</strong>が含まれる場合、順番が「みかん りんご」と逆に入力しても正解として判定されます！
       </p>
     </div>
     <button class="btn btn-secondary" style="margin-top:10px;" onclick="openPage('pgHome')">🏠 ホームに戻る</button>
@@ -348,7 +348,7 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
 <div class="ctx-overlay" id="bulkAddOverlay" style="display:none;" onclick="closeBulkAdd()">
   <div class="menu-card" style="padding:20px; max-width:90%; width:400px;" onclick="event.stopPropagation()">
     <h3 style="color:#fff; margin-bottom:10px; font-size:1.1rem;" id="bulkAddTitle">一括追加</h3>
-    <textarea id="txtBulkAdd" class="form-control" style="height:150px; margin-bottom:15px; font-family:'JetBrains Mono', monospace; font-size:0.85rem;" placeholder="問題,答え(カンマか読点区切り)&#10;問題,答え"></textarea>
+    <textarea id="txtBulkAdd" class="form-control" style="height:150px; margin-bottom:15px; font-family:'JetBrains Mono', monospace; font-size:0.85rem;" placeholder="問題,答え(カンマ、読点、スペース区切り)&#10;問題,答え"></textarea>
     <div class="form-row">
       <button class="btn btn-secondary" style="flex:1;" onclick="closeBulkAdd()">キャンセル</button>
       <button class="btn" style="flex:1;" onclick="submitBulkAdd()">追加する</button>
@@ -421,11 +421,12 @@ let quizPhase = 'q';
 let selectedChoiceIdx = null;
 let currentQuestionGradThreshold = 5;
 
-// 解答正規化
+// ★全角半角・順序揺れ・スペース区切りを吸収する解答正規化機能
 function normalizeAnswer(str) {
   if(!str) return '';
   let s = String(str).replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).toLowerCase().trim();
-  s = s.replace(/[、，／/]/g, ',');
+  // 読点、カンマ、スラッシュに加えて、半角スペース(\s)と全角スペース(\u3000)もカンマに統一
+  s = s.replace(/[、，／/ \u3000]+/g, ',');
   return s.split(',').map(x => x.trim()).filter(x => x !== '').sort().join(',');
 }
 
@@ -511,7 +512,7 @@ function setSyncStatus(state, text) {
 async function backgroundCloudSave(payload) {
   try {
     await firestore.collection("susuru_anki_users").doc(currentUser.uid).set({
-      version: "0.01.06-g", db: payload.db, categories: payload.categories,
+      version: "0.01.07-g", db: payload.db, categories: payload.categories,
       categoryTree: payload.categoryTree, lastSync: firebase.firestore.FieldValue.serverTimestamp()
     });
     setSyncStatus('success', '✅ 保存完了');
@@ -1174,7 +1175,7 @@ async function syncToCloud(isSilent = false) {
       }
     }
     ensureSystemSanity();
-    await ref.set({ version: "0.01.06-g", db, categories, categoryTree, lastSync: firebase.firestore.FieldValue.serverTimestamp() });
+    await ref.set({ version: "0.01.07-g", db, categories, categoryTree, lastSync: firebase.firestore.FieldValue.serverTimestamp() });
     autoMerge();
     if (document.getElementById('pgTree').classList.contains('active')) renderTree();
     if (document.getElementById('pgBox').classList.contains('active')) renderBox();
