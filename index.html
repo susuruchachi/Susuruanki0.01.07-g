@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>すするanki 0.01.09-g</title>
+<title>すするanki 0.01.10-g</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 /* ★長押し時のテキスト選択・システムメニューを完全ブロック */
@@ -147,7 +147,7 @@ h2 { font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; display: flex; al
       <div class="logo-dot"></div>
       <div class="logo-text">すするanki</div>
     </div>
-    <div class="version-badge">v0.01.09-g</div>
+    <div class="version-badge">v0.01.10-g</div>
   </header>
 
   <div id="pgHome" class="screen active">
@@ -536,7 +536,7 @@ function setSyncStatus(state, text) {
 async function backgroundCloudSave(payload) {
   try {
     await firestore.collection("susuru_anki_users").doc(currentUser.uid).set({
-      version: "0.01.09-g", db: payload.db, categories: payload.categories,
+      version: "0.01.10-g", db: payload.db, categories: payload.categories,
       categoryTree: payload.categoryTree, lastSync: firebase.firestore.FieldValue.serverTimestamp()
     });
     setSyncStatus('success', '✅ 保存完了');
@@ -1116,11 +1116,53 @@ function updateTimerUI() {
 
 function buildFourChoices(cur) {
   const area = document.getElementById('boxChoiceArea'); area.innerHTML = '';
-  let alt = [...new Set(db.filter(q => q.answer !== cur.answer).map(q => q.answer))];
-  alt.sort(() => Math.random() - 0.5);
-  let finalFour = [cur.answer, ...alt.slice(0, 3)];
-  while(finalFour.length < 4) finalFour.push(`選択肢_${Math.floor(Math.random()*1000)}`);
+  const correctNorm = normalizeAnswer(cur.answer);
+
+  // ★みんはや対策: 同じ問題文を持つ別カードの答えを除外（こすった/擦った問題）
+  const sameQAnswerNorms = new Set(
+    db.filter(q => q.id !== cur.id && normalizeAnswer(q.question) === normalizeAnswer(cur.question))
+      .map(q => normalizeAnswer(q.answer))
+  );
+
+  // ダミー選択肢として有効かチェック
+  const isValidDistractor = (answer) => {
+    const norm = normalizeAnswer(answer);
+    if (norm === correctNorm) return false;       // 正解と同一（表記違い含む）
+    if (sameQAnswerNorms.has(norm)) return false; // 同じ問いの別答え
+    return true;
+  };
+
+  // ★同カテゴリー優先: 直接カテゴリー → 親へ遡る → 全体
+  const getParentCategory = (catName) => {
+    for (const p in categoryTree) {
+      if ((categoryTree[p] || []).includes(catName)) return p;
+    }
+    return null;
+  };
+
+  let altCandidates = [];
+  let searchCat = cur.category;
+  while (altCandidates.length < 3 && searchCat) {
+    const catAnswers = [...new Set(
+      db.filter(q => q.category === searchCat && isValidDistractor(q.answer)).map(q => q.answer)
+    )];
+    catAnswers.forEach(a => { if (!altCandidates.includes(a)) altCandidates.push(a); });
+    searchCat = getParentCategory(searchCat);
+  }
+
+  // 同カテゴリー系統で足りなければ全体から補充
+  if (altCandidates.length < 3) {
+    const globalAnswers = [...new Set(
+      db.filter(q => isValidDistractor(q.answer)).map(q => q.answer)
+    )];
+    globalAnswers.forEach(a => { if (!altCandidates.includes(a)) altCandidates.push(a); });
+  }
+
+  altCandidates.sort(() => Math.random() - 0.5);
+  let finalFour = [cur.answer, ...altCandidates.slice(0, 3)];
+  while (finalFour.length < 4) finalFour.push(`選択肢_${Math.floor(Math.random()*1000)}`);
   finalFour.sort(() => Math.random() - 0.5);
+
   finalFour.forEach((text, i) => {
     const btn = document.createElement('button'); btn.className = 'choice-btn';
     btn.innerHTML = `<div class="choice-idx">${i+1}</div><div style="flex:1;">${escapeHtml(text)}</div>`;
@@ -1442,7 +1484,7 @@ async function syncToCloud(isSilent = false) {
       }
     }
     ensureSystemSanity();
-    await ref.set({ version: "0.01.09-g", db, categories, categoryTree, lastSync: firebase.firestore.FieldValue.serverTimestamp() });
+    await ref.set({ version: "0.01.10-g", db, categories, categoryTree, lastSync: firebase.firestore.FieldValue.serverTimestamp() });
     autoMerge();
     if (document.getElementById('pgTree').classList.contains('active')) renderTree();
     if (document.getElementById('pgBox').classList.contains('active')) renderBox();
