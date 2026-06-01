@@ -250,7 +250,7 @@ async function makePublicCategory(catName) {
   
   try {
     const docRef = await firestore.collection("susuru_anki_shared").add({
-      catName: catName, cards: subset, categories: allTargets, categoryTree: partialTree, ownerId: currentUser.uid, ownerName: currentUser.displayName || currentUser.email || '不明', isPublic: true, friends: [], createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      catName: catName, cards: subset, categories: allTargets, categoryTree: partialTree, ownerId: currentUser.uid, ownerName: currentUser.displayName || currentUser.email || '不明', isPublic: true, friends: [], subscriberUids: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     
     if (!subscribedDocs.includes(docRef.id)) subscribedDocs.push(docRef.id);
@@ -277,13 +277,26 @@ async function deletePublicCategory(docId, catName) {
 let publicCategoriesCache = []; let unsubscribePublicCategories = null;
 
 async function loadPublicCategories() {
-  const listDiv = document.getElementById('publicCategoriesList'); listDiv.innerHTML = '<div style="text-align:center; color:var(--text2);">読み込み中...</div>';
+  const listDiv = document.getElementById('publicCategoriesList');
+  if (!listDiv) return;
+  listDiv.innerHTML = '<div style="text-align:center; color:var(--text2);">読み込み中...</div>';
   try {
-    if (unsubscribePublicCategories) unsubscribePublicCategories();
-    unsubscribePublicCategories = firestore.collection("susuru_anki_shared").where('isPublic', '==', true).onSnapshot(snap => {
-        publicCategoriesCache = []; snap.forEach(doc => { publicCategoriesCache.push({ id: doc.id, ...doc.data() }); }); renderPublicCategories();
-      });
-  } catch(e) { listDiv.innerHTML = '<div style="color:var(--danger);">公開カテゴリーの読み込みに失敗しました</div>'; }
+    if (unsubscribePublicCategories) { unsubscribePublicCategories(); unsubscribePublicCategories = null; }
+    unsubscribePublicCategories = firestore.collection("susuru_anki_shared").where('isPublic', '==', true).onSnapshot(
+      snap => {
+        publicCategoriesCache = [];
+        snap.forEach(doc => { publicCategoriesCache.push({ id: doc.id, ...doc.data() }); });
+        renderPublicCategories();
+      },
+      err => {
+        console.error("公開カテゴリー読み込みエラー:", err);
+        listDiv.innerHTML = `<div style="color:var(--danger); padding:20px; text-align:center;">公開カテゴリーの読み込みに失敗しました<br><span style="font-size:0.75rem; color:var(--text3);">${err.code || err.message}</span></div>`;
+      }
+    );
+  } catch(e) {
+    console.error("loadPublicCategories catch:", e);
+    listDiv.innerHTML = `<div style="color:var(--danger); padding:20px; text-align:center;">公開カテゴリーの読み込みに失敗しました<br><span style="font-size:0.75rem; color:var(--text3);">${e.message}</span></div>`;
+  }
 }
 
 function renderPublicCategories() {
@@ -299,7 +312,7 @@ function renderPublicCategories() {
     card.innerHTML = `
       <div class="q-card-text">${escapeHtml(cat.catName)}</div>
       <div style="font-size:0.85rem; color:var(--text2); margin-top:4px;">作成者: <span style="color:var(--text);">${escapeHtml(cat.ownerName || 'Unknown')}</span></div>
-      <div style="font-size:0.8rem; color:var(--text3); margin-top:6px;">カード数: <span style="color:var(--primary); font-weight:bold;">${(cat.cards || []).length}問</span></div>
+      <div style="font-size:0.8rem; color:var(--text3); margin-top:6px;">カード数: <span style="color:var(--primary); font-weight:bold;">${(cat.cards || []).length}問</span>　👥 利用者: <span style="color:var(--accent); font-weight:bold;">${(cat.subscriberUids || []).length}人</span></div>
       <button class="btn btn-secondary" style="margin-top:10px; width:100%;" onclick="openPage('pgShared'); listenToSharedDoc('${cat.id}')">🌐 詳細・共同編集者の管理</button>
       <button class="btn btn-success" style="margin-top:8px; width:100%;" onclick="importPublicCategory('${cat.id}', '${escapeHtml(cat.catName)}')">📥 購読してインポート</button>
       ${isOwner ? `<button class="btn btn-danger" style="margin-top:8px; width:100%;" onclick="deletePublicCategory('${cat.id}', '${escapeHtml(cat.catName)}')">🗑️ 削除</button>` : ''}`;
@@ -325,5 +338,19 @@ async function importPublicCategory(docId, catName) {
     });
     autoMerge(); alert(`✅ 購読完了！\n新規追加: ${count}件`); openPage('pgBox');
     syncSubscriptions();
+    // 利用者数を記録（自分のUIDをsubscriberUidsに追記）
+    if (currentUser) {
+      try {
+        await firestore.collection('susuru_anki_shared').doc(docId).update({
+          subscriberUids: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+        });
+        // ローカルキャッシュも即時更新
+        const cached = publicCategoriesCache.find(c => c.id === docId);
+        if (cached) {
+          if (!cached.subscriberUids) cached.subscriberUids = [];
+          if (!cached.subscriberUids.includes(currentUser.uid)) cached.subscriberUids.push(currentUser.uid);
+        }
+      } catch(e2) { /* 失敗しても購読自体は成功しているので無視 */ }
+    }
   } catch(e) { alert('⚠️ 購読に失敗しました'); }
 }

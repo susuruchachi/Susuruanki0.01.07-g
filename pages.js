@@ -20,7 +20,6 @@ async function fetchAndRenderTutorial() {
     const res = await fetch('RULES.md');
     if (!res.ok) throw new Error('Failed to load');
     const text = await res.text();
-    // marked.jsが読み込まれていれば綺麗に変換、なければそのままテキスト表示
     if (typeof marked !== 'undefined') {
       container.innerHTML = marked.parse(text);
     } else {
@@ -33,7 +32,29 @@ async function fetchAndRenderTutorial() {
 }
 
 function executePageTransition(pageId, isBackAction) {
-  clearInterval(quizTimer); clearTimeout(autoNextTimeout);
+  // ★【0.02.50-g追加】オンライン対戦中の別ページ移動時の離脱・復帰用保存処理
+  if (typeof currentMatchId !== 'undefined' && currentMatchId && pageId !== 'pgOnlineMatch') {
+    if (typeof currentUser !== 'undefined' && currentUser) {
+      const matchRef = firestore.collection('susuru_anki_matches').doc(currentMatchId);
+      matchRef.get().then(doc => {
+        if (doc.exists) {
+          const data = doc.data();
+          let myRole = null;
+          if (data.player1 === currentUser.uid) myRole = 'player1';
+          if (data.player2 === currentUser.uid) myRole = 'player2';
+          
+          if (myRole) {
+            localStorage.setItem('susuru_anki_last_match', JSON.stringify({ matchId: currentMatchId, myRole: myRole }));
+            matchRef.update({
+              [`${myRole}Disconnected`]: true
+            }).catch(e => console.warn(e));
+          }
+        }
+      });
+    }
+  }
+
+  stopQuizTimer(); clearTimeout(autoNextTimeout);
   const activeScreen = document.querySelector('.screen.active');
   const currentId = activeScreen ? activeScreen.id : 'pgHome';
   
@@ -53,10 +74,11 @@ function executePageTransition(pageId, isBackAction) {
   if(pageId==='pgTree') { const el = document.getElementById('navTree'); if(el) el.classList.add('active'); renderTree(); }
   if(pageId==='pgBox') { const el = document.getElementById('navBox'); if(el) el.classList.add('active'); renderBox(); }
   if(pageId==='pgStats') { const el = document.getElementById('navStats'); if(el) el.classList.add('active'); renderStatsAndCharts(); }
+  if(pageId==='pgOnlineMatch') { const el = document.getElementById('navOnlineMatch'); if(el) el.classList.add('active'); initOnlineMatchPage(); }
   if(pageId==='pgPublicCategories') { loadPublicCategories(); }
   if(pageId==='pgCompareStats') { loadFriendsForComparison(); }
   if(pageId==='pgBackup') { const el = document.getElementById('navBackup'); if(el) el.classList.add('active'); }
-  if(pageId==='pgTutorial') { fetchAndRenderTutorial(); } // ★ ガイド読み込みを追加
+  if(pageId==='pgTutorial') { fetchAndRenderTutorial(); }
   
   closeMenu();
 }

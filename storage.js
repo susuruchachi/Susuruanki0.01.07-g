@@ -1,4 +1,7 @@
 // ----------------- データ管理 -----------------
+let deletedCards = [];
+let deletedCats = [];
+
 function loadData() {
   try { 
     const raw=localStorage.getItem(STORAGE_KEY); 
@@ -8,20 +11,28 @@ function loadData() {
       if(p.categories) categories=p.categories; 
       if(p.categoryTree) categoryTree=p.categoryTree; 
       if(p.subscribedDocs) subscribedDocs=p.subscribedDocs; 
+      if(p.deletedCards) deletedCards=p.deletedCards;
+      if(p.deletedCats) deletedCats=p.deletedCats;
     } 
   } catch(e){}
   try { shareStats = localStorage.getItem('shareStats') === 'true'; } catch(e){}
 }
-function saveData() {
+
+function saveData(immediate = false) {
   ensureSystemSanity();
-  const payload = { db, categories, categoryTree, subscribedDocs };
+  const payload = { db, categories, categoryTree, subscribedDocs, deletedCards, deletedCats };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   if (currentUser) {
     clearTimeout(syncTimeout);
     setSyncStatus('saving', '🔄 保存中...');
-    syncTimeout = setTimeout(() => backgroundCloudSave(payload), 1000);
+    if (immediate) {
+      backgroundCloudSave(payload);
+    } else {
+      syncTimeout = setTimeout(() => backgroundCloudSave(payload), 1000);
+    }
   }
 }
+
 function setSyncStatus(state, text) {
   const el = document.getElementById('cloudSyncStatus');
   if(!el) return;
@@ -29,12 +40,14 @@ function setSyncStatus(state, text) {
   el.innerText = text;
   if (state === 'success' || state === 'error') setTimeout(() => el.classList.add('hidden'), 3000);
 }
+
 async function backgroundCloudSave(payload) {
   try {
     await firestore.collection("susuru_anki_users").doc(currentUser.uid).set({
       version: typeof APP_VERSION !== 'undefined' ? APP_VERSION : "unknown", 
       db: payload.db, categories: payload.categories,
       categoryTree: payload.categoryTree, subscribedDocs: payload.subscribedDocs, 
+      deletedCards: payload.deletedCards || [], deletedCats: payload.deletedCats || [],
       lastSync: firebase.firestore.FieldValue.serverTimestamp()
     });
     setSyncStatus('success', '✅ 保存完了');
@@ -95,6 +108,9 @@ async function syncToCloud(isSilent = false) {
       let r = snap.data();
       if (r.subscribedDocs) subscribedDocs = r.subscribedDocs;
       
+      if (r.deletedCards) { r.deletedCards.forEach(id => { if (!deletedCards.includes(id)) deletedCards.push(id); }); }
+      if (r.deletedCats) { r.deletedCats.forEach(c => { if (!deletedCats.includes(c)) deletedCats.push(c); }); }
+      
       if (Array.isArray(r.db)) {
         let lMap = new Map(db.map(q => [q.id, q]));
         r.db.forEach(rq => {
@@ -102,17 +118,19 @@ async function syncToCloud(isSilent = false) {
           if (lMap.has(rq.id)) {
             let lq = lMap.get(rq.id);
             if (rq.level > lq.level || rq.correct > lq.correct || rq.streak > lq.streak) lMap.set(rq.id, rq);
-          } else lMap.set(rq.id, rq);
+          } else if (!deletedCards.includes(rq.id)) {
+            lMap.set(rq.id, rq);
+          }
         });
         db = Array.from(lMap.values());
       }
       let rCat = r.categories || [];
-      rCat.forEach(rc => { if (rc && !categories.includes(rc)) categories.push(rc); });
+      rCat.forEach(rc => { if (rc && !categories.includes(rc) && !deletedCats.includes(rc)) categories.push(rc); });
       let rTree = r.categoryTree || {};
       for (let p in rTree) {
-        if (!categories.includes(p)) categories.push(p);
+        if (!categories.includes(p) && !deletedCats.includes(p)) categories.push(p);
         if (!categoryTree[p]) categoryTree[p] = [];
-        rTree[p].forEach(c => { if (!categoryTree[p].includes(c)) categoryTree[p].push(c); });
+        rTree[p].forEach(c => { if (!categoryTree[p].includes(c) && !deletedCats.includes(c)) categoryTree[p].push(c); });
       }
     }
     ensureSystemSanity();
@@ -120,7 +138,7 @@ async function syncToCloud(isSilent = false) {
     
     await ref.set({ 
       version: typeof APP_VERSION !== 'undefined' ? APP_VERSION : "unknown", 
-      db, categories, categoryTree, subscribedDocs, lastSync: firebase.firestore.FieldValue.serverTimestamp() 
+      db, categories, categoryTree, subscribedDocs, deletedCards, deletedCats, lastSync: firebase.firestore.FieldValue.serverTimestamp() 
     });
     if (document.getElementById('pgTree').classList.contains('active')) renderTree();
     if (document.getElementById('pgBox').classList.contains('active')) renderBox();
